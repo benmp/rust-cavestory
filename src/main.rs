@@ -12,6 +12,7 @@ use std::path::Path;
 const GAME_FRAMERATE: u32 = 60;
 
 pub fn main() {
+
     let sdl_context = match sdl2::init() {
         Ok(sdl_context) => sdl_context,
         Err(err) => panic!("failed to create sdl context: {}", err)
@@ -32,12 +33,6 @@ pub fn main() {
         Err(err) => panic!("failed to create window: {}", err)
     };
 
-    let mut canvas = match window.into_canvas().build() {
-        Ok(canvas) => canvas,
-        Err(err) => panic!("failed to load canvas: {}", err)
-    };
-    let texture_creator = canvas.texture_creator();
-
     let mut event_pump = match sdl_context.event_pump() {
         Ok(event_pump) => event_pump,
         Err(err) => panic!("failed to get event pump: {}", err)
@@ -49,11 +44,25 @@ pub fn main() {
         Err(err) => panic!("failed to load font: {}", err)
     };
 
+    let mut canvas = match window.into_canvas().build() {
+        Ok(canvas) => canvas,
+        Err(err) => panic!("failed to load canvas: {}", err)
+    };
+    let texture_creator = canvas.texture_creator();
+
     let surface = font.render("HELLO").blended(Color::RGBA(255, 0, 0, 255)).unwrap();
-    let teture = texture_creator.create_texture_from_surface(&surface).unwrap();
+    let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
 
     canvas.set_draw_color(Color::RGBA(195, 217, 255, 255));
     canvas.clear();
+
+    let TextureQuery { width, height, .. } = texture.query();
+
+    let padding = 64;
+    let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
+
+    canvas.copy(&texture, None, Some(target)).unwrap();
+    canvas.present();
 
     let mut total_running_time_ms = 0;
     let ms_per_physics_step = 1_000 / GAME_FRAMERATE as u32; // how many ms per physic frame
@@ -145,8 +154,8 @@ fn get_centered_rect(rect_width: u32, rect_height: u32, cons_width: u32, cons_he
         (rect_width as i32, rect_height as i32)
     };
 
-    let cx = (SCREEN_WIDTH as i32 - w) / 2;
-    let cy = (SCREEN_HEIGHT as i32 - h) / 2;
+    let cx = (800 as i32 - w) / 2;
+    let cy = (600 as i32 - h) / 2;
     rect!(cx, cy, w, h)
 }
 

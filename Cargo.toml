@@ -3,5 +3,8 @@ name = "rust-cavestory"
 version = "0.1.0"
 authors = ["benmp <benmpbusiness@gmail.com>"]
 
-[dependencies]
-sdl2 = "0.31"
+[dependencies.sdl2]
+version = "0.31"
+default-features = false
+features = ["ttf"]
+
