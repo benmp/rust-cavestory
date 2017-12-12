@@ -50,19 +50,16 @@ pub fn main() {
     };
     let texture_creator = canvas.texture_creator();
 
-    let surface = font.render("HELLO").blended(Color::RGBA(255, 0, 0, 255)).unwrap();
-    let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
+    // let mut surface = font.render("HELLO").blended(Color::RGBA(255, 0, 0, 255)).unwrap();
+    // let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
 
-    canvas.set_draw_color(Color::RGBA(195, 217, 255, 255));
-    canvas.clear();
+    // let TextureQuery { width, height, .. } = texture.query();
 
-    let TextureQuery { width, height, .. } = texture.query();
+    // let padding = 64;
+    // let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
 
-    let padding = 64;
-    let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
-
-    canvas.copy(&texture, None, Some(target)).unwrap();
-    canvas.present();
+    // canvas.copy(&texture, None, Some(target)).unwrap();
+    // canvas.present();
 
     let mut total_running_time_ms = 0;
     let ms_per_physics_step = 1_000 / GAME_FRAMERATE as u32; // how many ms per physic frame
@@ -121,9 +118,16 @@ pub fn main() {
         partial_progress_to_next_frame = ms_left_to_simulate as f32 / ms_per_physics_step as f32;
 
         //Render
-        i = (i as f32 + (1.0 * partial_progress_to_next_frame)) as u8 % 255;
-        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
+        let surface = font.render(&(Instant::now().duration_since(new_time).subsec_nanos() / 1_000_000_000 * 60).to_string())
+            .blended(Color::RGBA(255, 0, 0, 255))
+            .unwrap();
+        let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
+        let TextureQuery { width, height, .. } = texture.query();
+        let padding = 64;
+        let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
+
         canvas.clear();
+        canvas.copy(&texture, None, Some(target)).unwrap();
         canvas.present();
     }
 }
