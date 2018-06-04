@@ -2,134 +2,161 @@ extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::TextureQuery;
-use sdl2::pixels::Color;
 
-use std::time::{Duration, Instant};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 const GAME_FRAMERATE: u32 = 60;
+const NS_IN_SEC: u64 = 1_000_000_000;
 
 pub fn main() {
-
     let sdl_context = match sdl2::init() {
         Ok(sdl_context) => sdl_context,
-        Err(err) => panic!("failed to create sdl context: {}", err)
+        Err(err) => panic!("failed to create sdl context: {}", err),
     };
 
     let video_subsystem = match sdl_context.video() {
         Ok(video_subsystem) => video_subsystem,
-        Err(err) => panic!("failed to create video subsystem: {}", err)
+        Err(err) => panic!("failed to create video subsystem: {}", err),
     };
 
     let ttf_context = match sdl2::ttf::init() {
         Ok(ttf_context) => ttf_context,
-        Err(err) => panic!("failed to create ttf context: {}", err)
+        Err(err) => panic!("failed to create ttf context: {}", err),
     };
 
     let window = match video_subsystem.window("rust-sdl2 demo", 800, 600).build() {
         Ok(window) => window,
-        Err(err) => panic!("failed to create window: {}", err)
+        Err(err) => panic!("failed to create window: {}", err),
     };
 
     let mut event_pump = match sdl_context.event_pump() {
         Ok(event_pump) => event_pump,
-        Err(err) => panic!("failed to get event pump: {}", err)
+        Err(err) => panic!("failed to get event pump: {}", err),
     };
 
-    let font_path: &Path = Path::new("ttf/Hack-Regular.ttf");
+    let font_path: &Path = Path::new("ttf/DejaVuSansMono.ttf");
     let mut font = match ttf_context.load_font(font_path, 128) {
         Ok(font) => font,
-        Err(err) => panic!("failed to load font: {}", err)
+        Err(err) => panic!("failed to load font: {}", err),
     };
+    font.set_style(sdl2::ttf::STYLE_BOLD);
 
     let mut canvas = match window.into_canvas().build() {
         Ok(canvas) => canvas,
-        Err(err) => panic!("failed to load canvas: {}", err)
+        Err(err) => panic!("failed to load canvas: {}", err),
     };
     let texture_creator = canvas.texture_creator();
 
-    // let mut surface = font.render("HELLO").blended(Color::RGBA(255, 0, 0, 255)).unwrap();
-    // let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
+    //set the background color to be drawn when .clear() is called
+    canvas.set_draw_color(Color::RGBA(195, 217, 255, 255));
+    //clear now so program first render has this bg color
+    canvas.clear();
 
-    // let TextureQuery { width, height, .. } = texture.query();
+    //I think this is server "tick" rate if tied to web traffic
+    let ns_per_physics_step = NS_IN_SEC as u64 / GAME_FRAMERATE as u64; // how many ns per physics frame
+    let mut ns_total_physics_running_time = 0u64;
 
-    // let padding = 64;
-    // let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
+    let mut top_of_previous_game_loop_start_time = Instant::now();
+    let mut ns_left_to_simulate = 0u64;
 
-    // canvas.copy(&texture, None, Some(target)).unwrap();
-    // canvas.present();
+    let mut top_of_current_game_loop_start_time: Instant;
+    let mut elapsed_time_since_previous_game_loop: Duration;
 
-    let mut total_running_time_ms = 0;
-    let ms_per_physics_step = 1_000 / GAME_FRAMERATE as u32; // how many ms per physic frame
+    let mut partial_progress_to_next_frame: f64;
 
-    let mut current_time = Instant::now();
-    let mut ms_left_to_simulate = 0;
+    let mut s_since_last_render = Instant::now();
 
-    let mut new_time: Instant;
-    let mut time_since_last_frame: Duration;
+    let mut physic_loop_count = 0u64;
+    let mut render_loop_count = 0u64;
 
-    let mut partial_progress_to_next_frame;
-
-    let mut i = 0;
     'running: loop {
-
         //new time at start of loop
-        new_time = Instant::now();
+        top_of_current_game_loop_start_time = Instant::now();
 
         //time since last start of loop (end of last physics cycle + render)
-        time_since_last_frame = new_time.duration_since(current_time);
+        elapsed_time_since_previous_game_loop = top_of_current_game_loop_start_time
+            .duration_since(top_of_previous_game_loop_start_time);
 
         //prevent spiral of death, run physics at 10fps if necessary
-        //if (frame_time.subsec_nanos * 1_000_000.00) > 100.0 {
-        // frame_time = 100.0;
+        // if (frame_time.subsec_nanos * 1_000_000.00) > 100.0 {
+        //     frame_time = 100.0;
         // }
 
-        // store current_time for next loop
-        current_time = new_time;
+        // store time for next loop
+        top_of_previous_game_loop_start_time = top_of_current_game_loop_start_time;
 
-        //accumulator represents how many ms have passed since last physics run
-        ms_left_to_simulate += time_since_last_frame.subsec_nanos() * 1_000_000;
+        //accumulator represents how many ns have passed since last physics run
+        ns_left_to_simulate += elapsed_time_since_previous_game_loop.as_secs() * NS_IN_SEC
+            + elapsed_time_since_previous_game_loop.subsec_nanos() as u64;
 
         //Run game engine at specific ms steps
-        while ms_left_to_simulate >= ms_per_physics_step {
+        while ns_left_to_simulate >= ns_per_physics_step {
             //we are now inside a single physics frame
             //drain events per physics frame
             for event in event_pump.poll_iter() {
                 match event {
-                    Event::Quit {..} |
-                        Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                            break 'running
-                        },
+                    Event::Quit { .. }
+                    | Event::KeyDown {
+                        keycode: Some(Keycode::Escape),
+                        ..
+                    } => break 'running,
                     _ => {}
                 }
             }
 
             //call game Systems here
-            //let the system know how long its been running and how long the current step is in ms
-            //runsystems(t, dt)
+            //let the systems know total running time, total physics time, and current ns per physics step
+            //runsystems(total_physics_running_time_ns, ns_per_physics_step)
 
-            total_running_time_ms += ms_per_physics_step;
-            ms_left_to_simulate -= ms_per_physics_step;
+            //update total physics time and calculate how many physics steps are left
+            ns_total_physics_running_time += ns_per_physics_step;
+            ns_left_to_simulate -= ns_per_physics_step;
+
+            physic_loop_count += 1;
         }
 
         //partial_progress_to_next_frame represents how close we are to the next complete frame (0% to 100%)
-        partial_progress_to_next_frame = ms_left_to_simulate as f32 / ms_per_physics_step as f32;
+        //later used for interpolation of previous state with current state renderer
+        partial_progress_to_next_frame = ns_left_to_simulate as f64 / ns_per_physics_step as f64;
 
-        //Render
-        let surface = font.render(&(Instant::now().duration_since(new_time).subsec_nanos() / 1_000_000_000 * 60).to_string())
-            .blended(Color::RGBA(255, 0, 0, 255))
-            .unwrap();
-        let texture = texture_creator.create_texture_from_surface(&surface).unwrap();
-        let TextureQuery { width, height, .. } = texture.query();
-        let padding = 64;
-        let target = get_centered_rect(800, 600, 800 - 64, 600 - 64);
+        //todo accumulate and average theses calculations in an fps entity
+        if Instant::now().duration_since(s_since_last_render).as_secs() > 0 {
+            //todo this is technically fps based on previous frame, but whatever?
+            let ns_previous_loop_duration = elapsed_time_since_previous_game_loop.as_secs()
+                * NS_IN_SEC
+                + elapsed_time_since_previous_game_loop.subsec_nanos() as u64;
 
-        canvas.clear();
-        canvas.copy(&texture, None, Some(target)).unwrap();
+            //Render
+            let surface = font
+                .render(&((NS_IN_SEC / ns_previous_loop_duration).to_string()))
+                .blended(Color::RGBA(255, 0, 0, 255))
+                .unwrap();
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .unwrap();
+
+            //only need to clear once we add new textures
+            canvas.clear();
+            canvas.copy(&texture, None, None).unwrap();
+
+            s_since_last_render = Instant::now();
+        }
+
+        //draw all copied textures
         canvas.present();
+        render_loop_count += 1;
     }
+
+    println!("physics count: {}", physic_loop_count);
+    println!(
+        "render count: {}, avg fps: {}",
+        render_loop_count,
+        render_loop_count / (ns_total_physics_running_time / NS_IN_SEC)
+    );
 }
 
 // handle the annoying Rect i32
@@ -162,4 +189,3 @@ fn get_centered_rect(rect_width: u32, rect_height: u32, cons_width: u32, cons_he
     let cy = (600 as i32 - h) / 2;
     rect!(cx, cy, w, h)
 }
-
